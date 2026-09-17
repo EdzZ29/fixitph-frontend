@@ -327,11 +327,31 @@ export const auth = {
 
   me: () => api.get<Me>('/auth/me'),
 
+  /**
+   * Password reset, in three steps. The emailed code is short enough to retype,
+   * so it is never the thing that authorises the change: verifying it returns a
+   * separate high-entropy token, and that is what resetPassword spends.
+   */
   forgotPassword: (email: string) =>
-    api.post<{ message: string }>('/auth/forgot-password', { email }, { retryOnUnauthenticated: false }),
+    api.post<{ message: string; codeTtlMinutes: number; devCode?: string }>(
+      '/auth/forgot-password',
+      { email },
+      { retryOnUnauthenticated: false },
+    ),
 
-  resetPassword: (token: string, password: string) =>
-    api.post<{ message: string }>('/auth/reset-password', { token, password }, { retryOnUnauthenticated: false }),
+  verifyResetCode: (email: string, code: string) =>
+    api.post<{ resetToken: string; expiresInSeconds: number }>(
+      '/auth/verify-reset-code',
+      { email, code },
+      { retryOnUnauthenticated: false },
+    ),
+
+  resetPassword: (resetToken: string, password: string) =>
+    api.post<{ message: string }>(
+      '/auth/reset-password',
+      { resetToken, password },
+      { retryOnUnauthenticated: false },
+    ),
 };
 
 export const providers = {
