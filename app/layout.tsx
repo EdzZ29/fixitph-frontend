@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Bricolage_Grotesque, Public_Sans } from "next/font/google";
 
 import { ThemeProvider } from "@/components/theme-provider";
+import { SessionProvider } from "@/lib/auth/session";
 import "./globals.css";
 
 // Display face. Bricolage has a real voice at heavy weights, closer to painted
@@ -65,7 +66,19 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           enableSystem
           disableTransitionOnChange
         >
-          {children}
+          {/*
+            One session for the whole app, public pages included.
+
+            Signing in leaves an httpOnly refresh cookie, so a signed-in
+            person browsing the directory is still signed in — the header just
+            had no way to know it, because every SessionProvider sat inside a
+            dashboard. Hoisting it here means the public header can show who
+            you are and offer the way back to your dashboard, and moving
+            between the marketing site and the dashboard costs no extra
+            round trip: the provider mounts once per page load and is shared
+            across every client-side navigation after it.
+          */}
+          <SessionProvider>{children}</SessionProvider>
         </ThemeProvider>
       </body>
     </html>

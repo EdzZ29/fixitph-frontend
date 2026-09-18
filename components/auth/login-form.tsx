@@ -10,17 +10,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError, auth } from "@/lib/api/client";
-
-/** Where to land after signing in, per role. */
-const HOME_FOR_ROLE: Record<string, string> = {
-  CUSTOMER: "/",
-  PROVIDER: "/provider",
-  ADMIN: "/admin",
-};
+import { HOME_FOR_ROLE, useSession } from "@/lib/auth/session";
 
 export function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
+  const { refresh } = useSession();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -50,6 +45,15 @@ export function LoginForm() {
     try {
       await auth.login(email.trim(), password);
       const me = await auth.me();
+
+      /**
+       * This page sits inside the app-wide SessionProvider, which read
+       * "anonymous" when it mounted. Without this the dashboard would see a
+       * stale anonymous session and bounce straight back to /login. Awaited,
+       * so the navigation below happens after the context agrees.
+       */
+      await refresh();
+
       router.replace(nextPath ?? HOME_FOR_ROLE[me.role] ?? "/");
       // Not resetting `submitting`: the button stays busy through navigation
       // rather than flickering back to "Sign in" on a page that is leaving.
@@ -91,7 +95,7 @@ export function LoginForm() {
           ref={errorRef}
           role="alert"
           tabIndex={-1}
-          className="border-destructive/70 bg-destructive/5 text-destructive rounded-md border px-4 py-3 focus-visible:outline-destructive focus-visible:outline-2 focus-visible:outline-offset-2"
+          className="border-border bg-secondary rounded-md border px-4 py-3 text-center focus-visible:outline-2 focus-visible:outline-offset-2"
         >
           <p className="flex items-start gap-2 text-sm font-medium">
             <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />

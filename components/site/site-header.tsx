@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Menu, Phone } from "lucide-react";
+import { LayoutDashboard, LogOut, Menu, Phone } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -17,9 +17,30 @@ import { Separator } from "@/components/ui/separator";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Logo } from "@/components/site/logo";
 import { navLinks } from "@/lib/site-data";
+import { HOME_FOR_ROLE, useSession } from "@/lib/auth/session";
+import { ROLE_LABEL } from "@/components/dashboard/nav";
+import { initials, personName } from "@/lib/format";
 
 export function SiteHeader() {
   const [open, setOpen] = useState(false);
+
+  /**
+   * Signing in does not end when you leave the dashboard.
+   *
+   * The refresh token is an httpOnly cookie, so a signed-in person browsing
+   * the directory is still signed in and still subject to their role — the
+   * header simply had no way to show it. It reads the session the root layout
+   * provides and offers the way back, rather than inviting someone who is
+   * already signed in to sign in again.
+   *
+   * The account area shows "Log in" only when the session is *known* to be
+   * anonymous. While it is still loading, or if the read failed — the API
+   * being unreachable, or a shared network hitting the rate limit — it shows
+   * nothing rather than telling someone who is signed in that they are not.
+   */
+  const { state, signOut } = useSession();
+  const user = state.status === "authenticated" ? state.user : null;
+  const anonymous = state.status === "anonymous";
 
   return (
     <header className="sticky top-0 z-50">
@@ -68,15 +89,39 @@ export function SiteHeader() {
 
           <div className="ml-auto flex items-center gap-1.5">
             <ThemeToggle />
-            <Button
-              asChild
-              variant="ghost"
-              className="hidden h-9 px-3 sm:inline-flex"
-            >
-              <Link href="/login">Log in</Link>
-            </Button>
+
+            {user ? (
+              <>
+                <Button
+                  asChild
+                  variant="ghost"
+                  className="hidden h-9 px-3 sm:inline-flex"
+                >
+                  <Link href={HOME_FOR_ROLE[user.role]}>
+                    <LayoutDashboard aria-hidden />
+                    My dashboard
+                  </Link>
+                </Button>
+                <span
+                  aria-hidden
+                  title={personName(user.profile, user.email)}
+                  className="bg-brand-panel text-brand-panel-foreground hidden size-9 shrink-0 items-center justify-center rounded-full text-xs font-medium sm:flex"
+                >
+                  {initials(personName(user.profile, user.email))}
+                </span>
+              </>
+            ) : anonymous ? (
+              <Button
+                asChild
+                variant="ghost"
+                className="hidden h-9 px-3 sm:inline-flex"
+              >
+                <Link href="/login">Log in</Link>
+              </Button>
+            ) : null}
+
             <Button asChild variant="accent" className="h-9 px-4">
-              <Link href="#search">Post a job</Link>
+              <Link href="/post-job">Post a job</Link>
             </Button>
 
             <Sheet open={open} onOpenChange={setOpen}>
@@ -107,17 +152,52 @@ export function SiteHeader() {
                       </Link>
                     </SheetClose>
                   ))}
-                  <SheetClose asChild>
-                    <Link
-                      href="/login"
-                      className="hover:bg-secondary rounded-md px-2 py-2.5 text-base font-medium"
-                    >
-                      Log in
-                    </Link>
-                  </SheetClose>
+                  {user ? (
+                    <SheetClose asChild>
+                      <Link
+                        href={HOME_FOR_ROLE[user.role]}
+                        className="hover:bg-secondary rounded-md px-2 py-2.5 text-base font-medium"
+                      >
+                        My dashboard
+                      </Link>
+                    </SheetClose>
+                  ) : anonymous ? (
+                    <SheetClose asChild>
+                      <Link
+                        href="/login"
+                        className="hover:bg-secondary rounded-md px-2 py-2.5 text-base font-medium"
+                      >
+                        Log in
+                      </Link>
+                    </SheetClose>
+                  ) : null}
                 </nav>
+
+                {user ? (
+                  <>
+                    <Separator />
+                    <div className="px-5 py-3">
+                      <p className="text-sm font-medium">
+                        {personName(user.profile, user.email)}
+                      </p>
+                      <p className="text-muted-foreground text-xs">
+                        Signed in as {ROLE_LABEL[user.role]}
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-2.5"
+                        onClick={() => void signOut()}
+                      >
+                        <LogOut aria-hidden />
+                        Sign out
+                      </Button>
+                    </div>
+                  </>
+                ) : null}
+
                 <Separator />
-                <div className="text-muted-foreground px-5 text-sm">
+                <div className="text-muted-foreground px-5 py-3 text-sm">
                   <p className="mb-3">
                     Need help posting a job? Call or Viber us.
                   </p>

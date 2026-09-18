@@ -17,7 +17,6 @@ export function ServiceSearch({ className }: { className?: string }) {
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    // Search is wired to the results page once the provider API is live.
     const params = new URLSearchParams();
     if (service) params.set("q", service);
     if (location) params.set("city", location);

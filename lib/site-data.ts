@@ -254,9 +254,10 @@ export const cities: City[] = [
 ];
 
 export const navLinks = [
-  { label: "Services", href: "#services" },
-  { label: "How it works", href: "#how-it-works" },
-  { label: "Become a provider", href: "#become-a-provider" },
+  { label: "Find a provider", href: "/providers" },
+  { label: "Services", href: "/search?tab=services" },
+  { label: "How it works", href: "/#how-it-works" },
+  { label: "Become a provider", href: "/provider/profile" },
 ];
 
 /** Suggestions for the hero search field. Plain words people actually type. */

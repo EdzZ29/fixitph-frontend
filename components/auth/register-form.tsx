@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ConsentNotice } from "@/components/legal/consent";
 import { ApiError, auth } from "@/lib/api/client";
+import { useSession } from "@/lib/auth/session";
 import { cn } from "cn";
 
 type Role = "CUSTOMER" | "PROVIDER";
@@ -24,6 +25,7 @@ const RULES = [
 
 export function RegisterForm() {
   const router = useRouter();
+  const { refresh } = useSession();
 
   const [role, setRole] = useState<Role>("CUSTOMER");
   const [firstName, setFirstName] = useState("");
@@ -68,7 +70,16 @@ export function RegisterForm() {
         role,
       });
 
-      router.replace(role === "PROVIDER" ? "/providers/join" : "/");
+      // The session provider mounted as anonymous; bring it up to date
+      // before navigating into anything that reads it.
+      await refresh();
+
+      // A new provider goes straight to building their profile, which is the
+      // thing standing between them and taking work. /providers/join never
+      // existed.
+      router.replace(
+        role === "PROVIDER" ? "/provider/profile" : "/dashboard",
+      );
       router.refresh();
     } catch (e) {
       setSubmitting(false);
@@ -86,7 +97,7 @@ export function RegisterForm() {
           ref={errorRef}
           role="alert"
           tabIndex={-1}
-          className="border-destructive/70 bg-destructive/5 text-destructive rounded-md border px-4 py-3 focus-visible:outline-destructive focus-visible:outline-2 focus-visible:outline-offset-2"
+          className="border-border bg-secondary rounded-md border px-4 py-3 text-center focus-visible:outline-2 focus-visible:outline-offset-2"
         >
           <p className="flex items-start gap-2 text-sm font-medium">
             <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />

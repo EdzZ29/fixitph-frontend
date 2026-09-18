@@ -154,7 +154,7 @@ export function ForgotPasswordForm() {
       ref={errorRef}
       role="alert"
       tabIndex={-1}
-      className="border-destructive/70 bg-destructive/5 text-destructive rounded-md border px-4 py-3 focus-visible:outline-destructive focus-visible:outline-2 focus-visible:outline-offset-2"
+      className="border-border bg-secondary rounded-md border px-4 py-3 text-center focus-visible:outline-2 focus-visible:outline-offset-2"
     >
       <p className="flex items-start gap-2 text-sm font-medium">
         <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
