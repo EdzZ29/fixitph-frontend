@@ -60,7 +60,6 @@ interface FormState {
   baseBarangay: string;
   serviceRadiusKm: string;
   acceptsEmergency: boolean;
-  isAcceptingBookings: boolean;
   paymentMethods: PaymentMethod[];
 }
 
@@ -74,7 +73,6 @@ const EMPTY: FormState = {
   baseBarangay: "",
   serviceRadiusKm: "",
   acceptsEmergency: false,
-  isAcceptingBookings: true,
   paymentMethods: ["CASH"],
 };
 
@@ -174,7 +172,6 @@ export function ProviderProfileForm() {
         : null,
       acceptsEmergency: form.acceptsEmergency,
       paymentMethods: form.paymentMethods,
-      ...(isNew ? {} : { isAcceptingBookings: form.isAcceptingBookings }),
     };
 
     const result = await run(() =>
@@ -452,23 +449,25 @@ export function ProviderProfileForm() {
             </span>
           </label>
 
+          {/*
+            "Taking new bookings" lives in Settings, not here.
+            
+            It is an operational switch — flipped on the day you fill up, and
+            back the day you free up — whereas this form is the shop window,
+            opened when the business itself changes. Two controls writing one
+            field is also two places to disagree about its value.
+          */}
           {!isNew ? (
-            <label className="flex items-start gap-2.5 text-sm">
-              <Checkbox
-                checked={form.isAcceptingBookings}
-                onCheckedChange={(checked) =>
-                  set("isAcceptingBookings", checked === true)
-                }
-                className="mt-0.5"
-              />
-              <span>
-                I am taking new bookings
-                <span className="text-muted-foreground block text-xs">
-                  Turn this off when you are fully booked. Your profile stays
-                  up but nobody can request work.
-                </span>
-              </span>
-            </label>
+            <p className="text-muted-foreground text-xs">
+              Taking new bookings is{" "}
+              <Link
+                href="/provider/settings"
+                className="underline underline-offset-4"
+              >
+                in Settings
+              </Link>
+              .
+            </p>
           ) : null}
         </fieldset>
 
@@ -553,7 +552,6 @@ function toFormState(profile: ProviderProfile): FormState {
       ? String(profile.serviceRadiusKm)
       : "",
     acceptsEmergency: profile.acceptsEmergency,
-    isAcceptingBookings: profile.isAcceptingBookings,
     paymentMethods: profile.paymentMethods.length
       ? profile.paymentMethods
       : ["CASH"],

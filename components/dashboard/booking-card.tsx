@@ -100,10 +100,13 @@ export function BookingCard({
   // The list select carries the review's presence for exactly this check.
   const canReview = isCustomer && status === "COMPLETED" && !booking.review;
 
+  // Both sides now have a real detail page. The provider's used to point back
+  // at the list it was already on, which meant the thread on that booking was
+  // unreachable from the provider's side.
   const detailHref = isCustomer
     ? `/dashboard/bookings/${booking.id}`
     : isProvider
-      ? `/provider/jobs?booking=${booking.id}`
+      ? `/provider/jobs/${booking.id}`
       : null;
 
   const counterparty = isProvider

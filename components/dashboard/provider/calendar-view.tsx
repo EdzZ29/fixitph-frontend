@@ -2,7 +2,15 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  MapPin,
+  MessagesSquare,
+  Wallet,
+} from "lucide-react";
 import { cn } from "cn";
 
 import { Button } from "@/components/ui/button";
@@ -20,7 +28,7 @@ import {
   type BookingSummary,
   type RequestSummary,
 } from "@/lib/api/client";
-import { formatTime, money, statusMeta } from "@/lib/format";
+import { formatTime, formatDuration, money, statusMeta } from "@/lib/format";
 import { useQuery } from "@/lib/use-query";
 
 /**
@@ -53,8 +61,23 @@ export function ProviderCalendarView() {
   });
   const [show, setShow] = useState<"all" | "bookings" | "requests">("all");
 
+  /**
+   * Which day the panel below is describing, as a yyyy-mm-dd key.
+   *
+   * A key rather than a Date because a Date compares by identity, so
+   * re-deriving the same day from the grid would never match the selection.
+   */
+  const [selected, setSelected] = useState<string | null>(null);
+
   const from = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
-  const to = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0, 23, 59, 59);
+  const to = new Date(
+    cursor.getFullYear(),
+    cursor.getMonth() + 1,
+    0,
+    23,
+    59,
+    59,
+  );
 
   const jobs = useQuery(
     () =>
@@ -84,6 +107,22 @@ export function ProviderCalendarView() {
     month: "long",
     year: "numeric",
   });
+
+  const cells = weeks.flat();
+
+  /**
+   * Today, when this month contains it; otherwise the first day with anything
+   * on it. Derived rather than stored so that paging to another month moves
+   * the panel with it instead of leaving it on a day nobody can see.
+   */
+  const fallback =
+    cells.find((cell) => cell.inMonth && isSameDay(cell.date, new Date())) ??
+    cells.find(
+      (cell) => cell.inMonth && cell.bookings.length + cell.requests.length > 0,
+    );
+
+  const active =
+    cells.find((cell) => dayKey(cell.date) === selected) ?? fallback ?? null;
 
   const jobCount = jobs.data?.items.length ?? 0;
 
@@ -172,11 +211,18 @@ export function ProviderCalendarView() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-7">
-              {weeks.flat().map((cell) => (
-                <DayBox key={cell.date.toISOString()} cell={cell} />
+              {cells.map((cell) => (
+                <DayBox
+                  key={cell.date.toISOString()}
+                  cell={cell}
+                  selected={!!active && isSameDay(cell.date, active.date)}
+                  onSelect={() => setSelected(dayKey(cell.date))}
+                />
               ))}
             </div>
           </div>
+
+          {active ? <DayDetail cell={active} /> : null}
 
           <div className="text-muted-foreground flex flex-wrap items-center gap-4 text-xs">
             <span className="flex items-center gap-1.5">
@@ -210,21 +256,40 @@ export function ProviderCalendarView() {
   );
 }
 
-function DayBox({ cell }: { cell: DayCell }) {
+function DayBox({
+  cell,
+  selected,
+  onSelect,
+}: {
+  cell: DayCell;
+  selected: boolean;
+  onSelect: () => void;
+}) {
   const today = isSameDay(cell.date, new Date());
   const items = cell.bookings.length + cell.requests.length;
 
   // On a phone the empty days of a month are noise, so they collapse away.
   if (!cell.inMonth && items === 0) {
-    return <div className="border-border hidden border-b border-r sm:block sm:min-h-24" />;
+    return (
+      <div className="border-border hidden border-b border-r sm:block sm:min-h-24" />
+    );
   }
 
   return (
-    <div
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      aria-label={`${cell.date.toLocaleDateString("en-PH", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+      })}: ${describeDay(cell)}`}
       className={cn(
-        "border-border border-b p-1.5 sm:min-h-24 sm:border-r",
+        "border-border focus-visible:ring-ring/50 block w-full border-b p-1.5 text-left focus-visible:ring-2 focus-visible:outline-none sm:min-h-24 sm:border-r",
         !cell.inMonth && "bg-secondary/30",
         items === 0 && "hidden sm:block",
+        selected && "ring-accent bg-accent/5 ring-2 ring-inset",
       )}
     >
       <p
@@ -247,34 +312,31 @@ function DayBox({ cell }: { cell: DayCell }) {
         <span className="hidden sm:inline">{cell.date.getDate()}</span>
       </p>
 
+      {/*
+        Summaries only. The day is a button, so nothing inside it may be a
+        link — a link inside a button is invalid markup and, more to the
+        point, the two would fight over the same click. Opening a job happens
+        in the panel below.
+      */}
       <ul className="mt-1 space-y-1">
         {cell.bookings.map((booking) => (
-          <li key={booking.id}>
-            <Link
-              href={`/provider/jobs?booking=${booking.id}`}
-              className="bg-accent text-accent-foreground block truncate rounded px-1.5 py-1 text-xs hover:opacity-90"
-              title={`${formatTime(booking.scheduledStart)} · ${
-                booking.service?.title ?? "Booking"
-              } · ${money(booking.totalAmount, booking.currency)}`}
-            >
-              <span className="font-medium tabular-nums">
-                {formatTime(booking.scheduledStart)}
-              </span>{" "}
-              {booking.service?.title ?? "Job"}
-            </Link>
+          <li
+            key={booking.id}
+            className="bg-accent text-accent-foreground truncate rounded px-1.5 py-1 text-xs"
+          >
+            <span className="font-medium tabular-nums">
+              {formatTime(booking.scheduledStart)}
+            </span>{" "}
+            {booking.service?.title ?? "Job"}
           </li>
         ))}
 
         {cell.requests.map((request) => (
-          <li key={request.id}>
-            <span
-              className="ring-border text-muted-foreground block truncate rounded px-1.5 py-1 text-xs ring-1"
-              title={`Request · ${request.title} · ${
-                statusMeta.request(request.status).label
-              }`}
-            >
-              {request.title}
-            </span>
+          <li
+            key={request.id}
+            className="ring-border text-muted-foreground truncate rounded px-1.5 py-1 text-xs ring-1"
+          >
+            {request.title}
           </li>
         ))}
       </ul>
@@ -290,8 +352,149 @@ function DayBox({ cell }: { cell: DayCell }) {
           ))}
         </div>
       ) : null}
-    </div>
+    </button>
   );
+}
+
+/** One line for a screen reader, so a day is not just a number. */
+function describeDay(cell: DayCell): string {
+  const parts: string[] = [];
+  if (cell.bookings.length) {
+    parts.push(
+      `${cell.bookings.length} job${cell.bookings.length === 1 ? "" : "s"}`,
+    );
+  }
+  if (cell.requests.length) {
+    parts.push(
+      `${cell.requests.length} request${cell.requests.length === 1 ? "" : "s"}`,
+    );
+  }
+  return parts.length ? parts.join(", ") : "nothing booked";
+}
+
+/**
+ * What is actually happening on the selected day.
+ *
+ * The grid can only carry a time and a truncated title — a month of them has
+ * to fit on a screen. This is where a booked day says what the job is: when
+ * it starts and how long it runs, where it is, what was agreed, what state it
+ * is in, and the way through to the customer and the thread.
+ */
+function DayDetail({ cell }: { cell: DayCell }) {
+  const heading = cell.date.toLocaleDateString("en-PH", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+
+  const empty = cell.bookings.length + cell.requests.length === 0;
+
+  return (
+    <section
+      aria-live="polite"
+      className="ring-foreground/10 rounded-xl px-4 py-4 ring-1"
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <h2 className="font-heading text-base font-medium">{heading}</h2>
+        <p className="text-muted-foreground text-sm">{describeDay(cell)}</p>
+      </div>
+
+      {empty ? (
+        <p className="text-muted-foreground mt-3 text-sm">
+          Nothing on this day. It is free to take work.
+        </p>
+      ) : (
+        <ul className="mt-3 space-y-3">
+          {cell.bookings.map((booking) => (
+            <li
+              key={booking.id}
+              className="border-border rounded-lg border px-3 py-3"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1.5">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">
+                    {booking.service?.title ??
+                      booking.serviceRequest?.title ??
+                      "Booking"}
+                  </p>
+                  <p className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                    <span className="flex items-center gap-1 tabular-nums">
+                      <Clock className="size-3.5 shrink-0" aria-hidden />
+                      {formatTime(booking.scheduledStart)}
+                      {booking.scheduledEnd
+                        ? ` – ${formatTime(booking.scheduledEnd)}`
+                        : ""}
+                      {durationOf(booking) ? ` · ${durationOf(booking)}` : ""}
+                    </span>
+                    {booking.serviceRequest ? (
+                      <span className="flex items-center gap-1">
+                        <MapPin className="size-3.5 shrink-0" aria-hidden />
+                        {[
+                          booking.serviceRequest.barangay,
+                          booking.serviceRequest.city,
+                        ]
+                          .filter(Boolean)
+                          .join(", ")}
+                      </span>
+                    ) : null}
+                    <span className="flex items-center gap-1 tabular-nums">
+                      <Wallet className="size-3.5 shrink-0" aria-hidden />
+                      {money(booking.totalAmount, booking.currency)}
+                    </span>
+                  </p>
+                </div>
+                <StatusBadge meta={statusMeta.booking(booking.status)} />
+              </div>
+
+              <div className="mt-2.5 flex flex-wrap gap-2">
+                <Button asChild size="sm" variant="outline">
+                  <Link href={`/provider/jobs/${booking.id}`}>
+                    <MessagesSquare aria-hidden />
+                    Details and messages
+                  </Link>
+                </Button>
+              </div>
+            </li>
+          ))}
+
+          {cell.requests.map((request) => (
+            <li
+              key={request.id}
+              className="border-border rounded-lg border border-dashed px-3 py-3"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1.5">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">{request.title}</p>
+                  <p className="text-muted-foreground mt-0.5 text-xs">
+                    Not booked. This is a request you have quoted for, on its
+                    preferred date.
+                  </p>
+                </div>
+                <StatusBadge meta={statusMeta.request(request.status)} />
+              </div>
+
+              <div className="mt-2.5">
+                <Button asChild size="sm" variant="outline">
+                  <Link href="/provider/requests">See the request</Link>
+                </Button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/** How long the job is scheduled to run, when both ends are known. */
+function durationOf(booking: BookingSummary): string | null {
+  if (!booking.scheduledEnd) return null;
+  const minutes = Math.round(
+    (new Date(booking.scheduledEnd).getTime() -
+      new Date(booking.scheduledStart).getTime()) /
+      60000,
+  );
+  return minutes > 0 ? formatDuration(minutes) : null;
 }
 
 /**
@@ -364,4 +567,3 @@ function dayKey(date: Date): string {
 export function isSameDay(a: Date, b: Date): boolean {
   return dayKey(a) === dayKey(b);
 }
-

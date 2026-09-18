@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ConsentNotice } from "@/components/legal/consent";
+import { AuthDivider, GoogleButton } from "@/components/auth/google-button";
 import { ApiError, auth } from "@/lib/api/client";
 import { useSession } from "@/lib/auth/session";
 import { cn } from "cn";
@@ -36,7 +37,9 @@ export function RegisterForm() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<{ message: string; code: string } | null>(null);
+  const [error, setError] = useState<{ message: string; code: string } | null>(
+    null,
+  );
   const [fieldErrors, setFieldErrors] = useState<string[]>([]);
 
   const errorRef = useRef<HTMLDivElement>(null);
@@ -47,7 +50,10 @@ export function RegisterForm() {
     if (submitting) return;
 
     if (unmet.length > 0) {
-      setError({ code: "WEAK_PASSWORD", message: "Your password does not meet the requirements yet." });
+      setError({
+        code: "WEAK_PASSWORD",
+        message: "Your password does not meet the requirements yet.",
+      });
       setFieldErrors(unmet.map((r) => r.label));
       requestAnimationFrame(() => errorRef.current?.focus());
       return;
@@ -77,9 +83,7 @@ export function RegisterForm() {
       // A new provider goes straight to building their profile, which is the
       // thing standing between them and taking work. /providers/join never
       // existed.
-      router.replace(
-        role === "PROVIDER" ? "/provider/profile" : "/dashboard",
-      );
+      router.replace(role === "PROVIDER" ? "/provider/profile" : "/dashboard");
       router.refresh();
     } catch (e) {
       setSubmitting(false);
@@ -92,6 +96,11 @@ export function RegisterForm() {
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-5">
+      {/* Signing up with Google creates a customer account. Becoming a
+          provider stays a separate step, with its own profile and documents. */}
+      <GoogleButton label="Sign up with Google" />
+      <AuthDivider>or use your email</AuthDivider>
+
       {error ? (
         <div
           ref={errorRef}
@@ -120,8 +129,16 @@ export function RegisterForm() {
         <div className="grid gap-3 sm:grid-cols-2">
           {(
             [
-              { value: "CUSTOMER", title: "Hire someone", body: "Post a job and compare quotes." },
-              { value: "PROVIDER", title: "Offer my services", body: "List your trade and take bookings." },
+              {
+                value: "CUSTOMER",
+                title: "Hire someone",
+                body: "Post a job and compare quotes.",
+              },
+              {
+                value: "PROVIDER",
+                title: "Offer my services",
+                body: "List your trade and take bookings.",
+              },
             ] as const
           ).map((option) => (
             <label
@@ -199,7 +216,10 @@ export function RegisterForm() {
       <div className="grid gap-5 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="phone">
-            Mobile number <span className="text-muted-foreground font-normal">(optional)</span>
+            Mobile number{" "}
+            <span className="text-muted-foreground font-normal">
+              (optional)
+            </span>
           </Label>
           <Input
             id="phone"
@@ -219,7 +239,10 @@ export function RegisterForm() {
         </div>
         <div className="space-y-2">
           <Label htmlFor="city">
-            City <span className="text-muted-foreground font-normal">(optional)</span>
+            City{" "}
+            <span className="text-muted-foreground font-normal">
+              (optional)
+            </span>
           </Label>
           <Input
             id="city"
@@ -339,7 +362,8 @@ function describe(e: unknown): {
     return {
       banner: {
         code: "NETWORK_ERROR",
-        message: "Could not reach FixItPH. Check your connection and try again.",
+        message:
+          "Could not reach FixItPH. Check your connection and try again.",
       },
       fields: [],
     };
@@ -363,7 +387,8 @@ function describe(e: unknown): {
       return {
         banner: {
           code: e.code,
-          message: "Too many sign up attempts from this device. Wait a few minutes and try again.",
+          message:
+            "Too many sign up attempts from this device. Wait a few minutes and try again.",
         },
         fields: [],
       };

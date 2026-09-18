@@ -1,5 +1,6 @@
 import {
   BadgeCheck,
+  MessagesSquare,
   CalendarCheck,
   CalendarDays,
   ClipboardList,
@@ -70,6 +71,12 @@ const CUSTOMER: NavSection[] = [
         icon: ClipboardList,
         blurb: "Jobs you have posted and the quotes that came back.",
       },
+      {
+        href: "/dashboard/messages",
+        label: "Messages",
+        icon: MessagesSquare,
+        blurb: "Every conversation with a provider, in one place.",
+      },
     ],
   },
   {
@@ -137,10 +144,28 @@ const PROVIDER: NavSection[] = [
         blurb: "Jobs posted near you that you can quote for.",
       },
       {
+        href: "/provider/messages",
+        label: "Messages",
+        icon: MessagesSquare,
+        blurb: "Every conversation with a customer, in one place.",
+      },
+      {
         href: "/provider/reviews",
         label: "Reviews",
         icon: Star,
         blurb: "What customers said, and your replies.",
+      },
+    ],
+  },
+  {
+    title: "Account",
+    items: [
+      {
+        href: "/provider/settings",
+        label: "Settings",
+        icon: Settings,
+        blurb:
+          "Pause new bookings, correct your details, and manage how you sign in.",
       },
     ],
   },

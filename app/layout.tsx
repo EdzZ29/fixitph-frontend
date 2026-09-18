@@ -3,6 +3,7 @@ import { Bricolage_Grotesque, Public_Sans } from "next/font/google";
 
 import { ThemeProvider } from "@/components/theme-provider";
 import { SessionProvider } from "@/lib/auth/session";
+import { ChatLauncher } from "@/components/messaging/chat-launcher";
 import "./globals.css";
 
 // Display face. Bricolage has a real voice at heavy weights, closer to painted
@@ -57,6 +58,15 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en-PH"
       suppressHydrationWarning
+      /*
+        globals.css sets scroll-behavior: smooth, which is right for an
+        in-page anchor and wrong for a route change: without this attribute
+        Next cannot tell that the page scrolls smoothly, so moving between
+        routes animates its jump to the top and fights scroll restoration on
+        the way back. Declaring it lets Next suspend smooth scrolling for the
+        navigation itself and leave it alone everywhere else.
+      */
+      data-scroll-behavior="smooth"
       className={`${bricolage.variable} ${publicSans.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
@@ -78,7 +88,18 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             round trip: the provider mounts once per page load and is shared
             across every client-side navigation after it.
           */}
-          <SessionProvider>{children}</SessionProvider>
+          <SessionProvider>
+            {children}
+            {/*
+              The chat bubble, mounted once for the whole site rather than per
+              dashboard. Somebody comparing providers on a public page is
+              often waiting on an answer from one of them, and making them
+              navigate back into a booking to read it is how a reply gets
+              missed. It renders nothing at all for a visitor who is not
+              signed in.
+            */}
+            <ChatLauncher />
+          </SessionProvider>
         </ThemeProvider>
       </body>
     </html>

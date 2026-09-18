@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AuthDivider, GoogleButton } from "@/components/auth/google-button";
 import { ApiError, auth } from "@/lib/api/client";
 import { HOME_FOR_ROLE, useSession } from "@/lib/auth/session";
 
@@ -21,7 +22,9 @@ export function LoginForm() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<{ message: string; code: string } | null>(null);
+  const [error, setError] = useState<{ message: string; code: string } | null>(
+    null,
+  );
   const [fieldErrors, setFieldErrors] = useState<string[]>([]);
 
   const errorRef = useRef<HTMLDivElement>(null);
@@ -33,6 +36,9 @@ export function LoginForm() {
   const justRegistered = params.get("registered") === "1";
   const sessionExpired = params.get("expired") === "1";
   const passwordReset = params.get("reset") === "1";
+  // Set by the API when a Google sign-in could not be completed. It redirects
+  // here rather than rendering, because the callback is a navigation.
+  const oauthError = OAUTH_MESSAGES[params.get("error") ?? ""] ?? null;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -72,6 +78,18 @@ export function LoginForm() {
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-5">
+      <GoogleButton />
+      <AuthDivider>or sign in with your email</AuthDivider>
+
+      {oauthError && !error ? (
+        <p
+          role="alert"
+          className="border-border bg-secondary rounded-md border px-4 py-3 text-center text-sm"
+        >
+          {oauthError}
+        </p>
+      ) : null}
+
       {justRegistered && !error ? (
         <p className="border-border bg-secondary rounded-md border px-4 py-3 text-sm">
           Your account is ready. Sign in to finish setting up.
@@ -201,6 +219,25 @@ export function LoginForm() {
 }
 
 /**
+ * What the API's redirect codes mean, in words.
+ *
+ * Deliberately vague about accounts. "That email already has an account" would
+ * confirm an address is registered to anyone who can type one into Google,
+ * which is precisely what the sign-in form refuses to do.
+ */
+const OAUTH_MESSAGES: Record<string, string> = {
+  oauth_state:
+    "That sign-in link did not come from this browser, so it was not used. Try again from here.",
+  oauth_failed: "Google sign-in did not complete. Try again.",
+  google_sign_in_unavailable:
+    "Signing in with Google is not available at the moment. Use your email and password.",
+  google_email_unverified:
+    "Google has not verified that email address, so it cannot be used to sign in.",
+  account_suspended: "This account is suspended. Contact support.",
+  account_deactivated: "This account has been deactivated.",
+};
+
+/**
  * Turns an API failure into something worth reading. The server's codes are
  * stable; its messages are written for developers, so a few are rewritten here
  * where a person can actually act on the difference.
@@ -259,7 +296,8 @@ function describe(e: unknown): {
       return {
         banner: {
           code: e.code,
-          message: "Too many attempts from this device. Wait a few minutes and try again.",
+          message:
+            "Too many attempts from this device. Wait a few minutes and try again.",
         },
         fields: [],
       };

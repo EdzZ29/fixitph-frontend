@@ -33,14 +33,23 @@ export function SiteHeader() {
    * provides and offers the way back, rather than inviting someone who is
    * already signed in to sign in again.
    *
-   * The account area shows "Log in" only when the session is *known* to be
-   * anonymous. While it is still loading, or if the read failed — the API
-   * being unreachable, or a shared network hitting the rate limit — it shows
-   * nothing rather than telling someone who is signed in that they are not.
+   * The account area waits for the session before showing anything about
+   * it, rather than telling someone who is signed in that they are not.
+   *
+   * But only while it is still *loading*. If the read failed outright — the
+   * API down, a shared network hitting the rate limit — the way in is offered
+   * anyway. This used to show nothing in that case, on the same reasoning,
+   * and the result was that an API outage removed the only route to /login
+   * from the header and the menu both: a visitor who was never signed in had
+   * no way to sign in, and no way to find out why.
+   *
+   * "Log in" is a link to a page, not a claim about who you are. Offering it
+   * to someone who turns out to be signed in costs them a redirect. Hiding it
+   * from someone who is not costs them the site.
    */
   const { state, signOut } = useSession();
   const user = state.status === "authenticated" ? state.user : null;
-  const anonymous = state.status === "anonymous";
+  const offerLogin = state.status === "anonymous" || state.status === "error";
 
   return (
     <header className="sticky top-0 z-50">
@@ -110,7 +119,7 @@ export function SiteHeader() {
                   {initials(personName(user.profile, user.email))}
                 </span>
               </>
-            ) : anonymous ? (
+            ) : offerLogin ? (
               <Button
                 asChild
                 variant="ghost"
@@ -161,7 +170,7 @@ export function SiteHeader() {
                         My dashboard
                       </Link>
                     </SheetClose>
-                  ) : anonymous ? (
+                  ) : offerLogin ? (
                     <SheetClose asChild>
                       <Link
                         href="/login"

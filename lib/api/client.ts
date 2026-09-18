@@ -799,7 +799,34 @@ export interface MessageRow {
     originalFilename: string;
     mimeType: string;
     sizeBytes: number;
+    /**
+     * A link that works for a few minutes. Signed when the thread is read,
+     * never a storage key — and null if the object could not be reached, so
+     * one unavailable image cannot take the thread down with it.
+     */
+    url: string | null;
   }[];
+}
+
+/** One conversation, as the list of them reports it. */
+export interface MessageThreadRow {
+  bookingId: string | null;
+  serviceRequestId: string | null;
+  /** The short booking reference the booking screens print. */
+  reference: string | null;
+  title: string;
+  counterpartyName: string;
+  area: string | null;
+  status: BookingStatus | null;
+  scheduledStart: string | null;
+  unread: number;
+  lastMessage: {
+    body: string;
+    messageType: MessageRow['messageType'];
+    createdAt: string;
+    /** Whether the caller sent it, for the "You: " prefix. */
+    mine: boolean;
+  };
 }
 
 export interface NotificationRow {
@@ -1090,6 +1117,15 @@ export const auth = {
   },
 
   me: () => api.get<Me>('/auth/me'),
+
+  /**
+   * Where "Continue with Google" sends the browser.
+   *
+   * A URL rather than a request: the flow is a top-level navigation through
+   * Google's consent screen, and the API sets the session cookie on the way
+   * back. Nothing is returned to script, so there is nothing here to await.
+   */
+  googleUrl: () => `${API_URL}/auth/google`,
 
   /**
    * Email verification: send a code, then confirm it.
@@ -1535,6 +1571,30 @@ export const messages = {
     page?: number;
     limit?: number;
   }) => api.get<Paginated<MessageRow>>('/messages', { query: params }),
+
+  /**
+   * A photo and the message carrying it, in one request.
+   *
+   * FormData rather than JSON, and the client leaves it alone — the browser
+   * has to set the multipart boundary itself.
+   */
+  sendImage: (input: {
+    file: File;
+    bookingId?: string;
+    serviceRequestId?: string;
+    body?: string;
+  }) => {
+    const form = new FormData();
+    form.append('file', input.file);
+    if (input.bookingId) form.append('bookingId', input.bookingId);
+    if (input.serviceRequestId)
+      form.append('serviceRequestId', input.serviceRequestId);
+    if (input.body?.trim()) form.append('body', input.body.trim());
+    return api.post<MessageRow>('/messages/attachment', form);
+  },
+
+  /** Every conversation the caller is in, newest first. */
+  threads: () => api.get<MessageThreadRow[]>('/messages/threads'),
 
   unreadCount: () => api.get<{ unread: number }>('/messages/unread-count'),
 };

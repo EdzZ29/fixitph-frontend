@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, Receipt, Star } from "lucide-react";
+import { ArrowLeft, MapPin, Phone, Receipt, Star, User } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -27,7 +27,28 @@ import { useQuery } from "@/lib/use-query";
  * is written by a database trigger rather than by the API, so it cannot be
  * edited after the fact.
  */
-export function BookingDetail({ bookingId }: { bookingId: string }) {
+/**
+ * One booking, from either side of it.
+ *
+ * The same screen serves both because it is the same booking: the money, the
+ * history and the thread do not change depending on who is reading. What does
+ * change is who the other party is, and that is the whole reason a provider
+ * needs this page — before it existed their only route into a job was a list
+ * with no thread on it, so a provider could be messaged and had nowhere to
+ * reply.
+ *
+ * The customer's contact details are not decided here. The API releases them
+ * on its own terms — address withheld until the booking is confirmed — and
+ * this only renders what it was given.
+ */
+export function BookingDetail({
+  bookingId,
+  perspective = "customer",
+}: {
+  bookingId: string;
+  perspective?: "customer" | "provider";
+}) {
+  const isProvider = perspective === "provider";
   const { data, loading, error, reload } = useQuery(
     () => bookings.byId(bookingId),
     [bookingId],
@@ -36,7 +57,7 @@ export function BookingDetail({ bookingId }: { bookingId: string }) {
   if (loading) {
     return (
       <div className="space-y-5">
-        <PageHeader title="Booking" />
+        <PageHeader title={isProvider ? "Job" : "Booking"} />
         <LoadingRows rows={3} />
       </div>
     );
@@ -45,7 +66,7 @@ export function BookingDetail({ bookingId }: { bookingId: string }) {
   if (error) {
     return (
       <div className="space-y-5">
-        <BackLink />
+        <BackLink isProvider={isProvider} />
         <ErrorState error={error} onRetry={reload} />
       </div>
     );
@@ -53,12 +74,17 @@ export function BookingDetail({ bookingId }: { bookingId: string }) {
 
   if (!data) return null;
 
+  const customerName = data.customerContact?.name?.trim() || "the customer";
+
   return (
     <div className="space-y-5">
-      <BackLink />
+      <BackLink isProvider={isProvider} />
 
       <PageHeader
-        title={data.service?.title ?? data.provider.businessName}
+        title={
+          data.service?.title ??
+          (isProvider ? customerName : data.provider.businessName)
+        }
         description={
           <>
             Booked {formatDateTime(data.createdAt)} · reference{" "}
@@ -67,7 +93,62 @@ export function BookingDetail({ bookingId }: { bookingId: string }) {
         }
       />
 
-      <BookingCard booking={data} perspective="customer" onChanged={reload} />
+      <BookingCard
+        booking={data}
+        perspective={perspective}
+        onChanged={reload}
+      />
+
+      {/*
+        Who the job is for. Only the provider sees this, and only because the
+        API decided to send it — the address stays withheld until the booking
+        is confirmed, which is what `released` reports.
+      */}
+      {isProvider && data.customerContact ? (
+        <section className="ring-foreground/10 rounded-xl px-4 py-4 ring-1">
+          <h2 className="font-heading flex items-center gap-2 text-base font-medium">
+            <User className="size-4" aria-hidden />
+            Customer
+          </h2>
+          <dl className="mt-3 space-y-2 text-sm">
+            <Row label="Name">{data.customerContact.name ?? "—"}</Row>
+            <Row label="Area">
+              <span className="flex items-center gap-1.5">
+                <MapPin className="size-3.5 shrink-0" aria-hidden />
+                {[data.customerContact.barangay, data.customerContact.city]
+                  .filter(Boolean)
+                  .join(", ") || "—"}
+              </span>
+            </Row>
+            {data.customerContact.released ? (
+              <>
+                <Row label="Phone">
+                  {data.customerContact.phone ? (
+                    <a
+                      href={`tel:${data.customerContact.phone}`}
+                      className="flex items-center gap-1.5 underline-offset-4 hover:underline"
+                    >
+                      <Phone className="size-3.5 shrink-0" aria-hidden />
+                      {data.customerContact.phone}
+                    </a>
+                  ) : (
+                    "—"
+                  )}
+                </Row>
+                <Row label="Address">
+                  {data.customerContact.addressLine1 ?? "—"}
+                </Row>
+              </>
+            ) : null}
+          </dl>
+          {!data.customerContact.released ? (
+            <p className="text-muted-foreground mt-3 text-xs">
+              The exact address and phone number are shared once the booking is
+              confirmed. Until then, use the messages below.
+            </p>
+          ) : null}
+        </section>
+      ) : null}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="ring-foreground/10 rounded-xl px-4 py-4 ring-1">
@@ -92,8 +173,10 @@ export function BookingDetail({ bookingId }: { bookingId: string }) {
             ) : null}
           </dl>
           <p className="text-muted-foreground mt-3 text-xs">
-            FixItPH does not take the payment. You settle directly with the
-            provider by the method above.
+            FixItPH does not take the payment.{" "}
+            {isProvider
+              ? "The customer settles with you directly by the method above."
+              : "You settle directly with the provider by the method above."}
           </p>
         </section>
 
@@ -139,14 +222,18 @@ export function BookingDetail({ bookingId }: { bookingId: string }) {
 
       <MessageThread
         bookingId={data.id}
-        counterpartyName={data.provider.businessName}
+        counterpartyName={
+          isProvider ? customerName : data.provider.businessName
+        }
       />
 
       {data.review ? (
         <section className="ring-foreground/10 rounded-xl px-4 py-4 ring-1">
           <h2 className="font-heading flex items-center gap-2 text-base font-medium">
             <Star className="size-4" aria-hidden />
-            Your review
+            {/* The same row, read from opposite ends: the customer wrote it,
+                the provider received it. */}
+            {isProvider ? `Review from ${customerName}` : "Your review"}
           </h2>
           <Separator className="my-3" />
           <p className="text-sm font-medium tabular-nums">
@@ -166,12 +253,12 @@ export function BookingDetail({ bookingId }: { bookingId: string }) {
   );
 }
 
-function BackLink() {
+function BackLink({ isProvider = false }: { isProvider?: boolean }) {
   return (
     <Button asChild variant="ghost" size="sm" className="-ml-2">
-      <Link href="/dashboard/bookings">
+      <Link href={isProvider ? "/provider/jobs" : "/dashboard/bookings"}>
         <ArrowLeft aria-hidden />
-        All bookings
+        {isProvider ? "All jobs" : "All bookings"}
       </Link>
     </Button>
   );
