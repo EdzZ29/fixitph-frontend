@@ -1,11 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, MapPin, Phone, Receipt, Star, User } from "lucide-react";
+import { useState } from "react";
+import {
+  ArrowLeft,
+  BadgeCheck,
+  MapPin,
+  Phone,
+  Receipt,
+  Star,
+  User,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { BookingCard } from "@/components/dashboard/booking-card";
+import { ConfirmDialog } from "@/components/dashboard/confirm-dialog";
 import { MessageThread } from "@/components/messaging/message-thread";
 import { StatusBadge } from "@/components/dashboard/status-badge";
 import {
@@ -13,8 +25,14 @@ import {
   LoadingRows,
   PageHeader,
 } from "@/components/dashboard/states";
-import { bookings } from "@/lib/api/client";
-import { formatDateTime, money, statusMeta } from "@/lib/format";
+import { bookings, type BookingDetail as BookingDetailData, type PaymentMethod } from "@/lib/api/client";
+import {
+  acceptedPaymentMethods,
+  formatDateTime,
+  money,
+  PAYMENT_METHOD_LABEL,
+  statusMeta,
+} from "@/lib/format";
 import { useQuery } from "@/lib/use-query";
 
 /**
@@ -168,6 +186,14 @@ export function BookingDetail({
             <Row label="Status">
               <StatusBadge meta={statusMeta.payment(data.paymentStatus)} />
             </Row>
+            {data.paidAt ? (
+              <>
+                <Row label="Settled by">
+                  {PAYMENT_METHOD_LABEL[data.paidMethod ?? data.paymentMethod]}
+                </Row>
+                <Row label="Confirmed">{formatDateTime(data.paidAt)}</Row>
+              </>
+            ) : null}
             {data.completedAt ? (
               <Row label="Completed">{formatDateTime(data.completedAt)}</Row>
             ) : null}
@@ -178,6 +204,12 @@ export function BookingDetail({
               ? "The customer settles with you directly by the method above."
               : "You settle directly with the provider by the method above."}
           </p>
+
+          <MarkPaidControl
+            booking={data}
+            isProvider={isProvider}
+            onDone={reload}
+          />
         </section>
 
         <section className="ring-foreground/10 rounded-xl px-4 py-4 ring-1">
@@ -261,6 +293,90 @@ function BackLink({ isProvider = false }: { isProvider?: boolean }) {
         {isProvider ? "All jobs" : "All bookings"}
       </Link>
     </Button>
+  );
+}
+
+/**
+ * The provider's confirmation that the money arrived.
+ *
+ * Shown to nobody else, because nobody else can know. FixItPH never handles
+ * the payment, so the platform cannot observe it and the customer cannot
+ * prove it — the only party whose word means anything here is the one who
+ * would be out of pocket if it were wrong. The server enforces the same rule;
+ * this is only the door.
+ *
+ * Behind a confirm dialog because it cannot be taken back: a payment recorded
+ * in error has to go through a dispute, which is deliberate — a button that
+ * could quietly un-mark a payment would make the record worth no more than
+ * whoever pressed it last.
+ */
+function MarkPaidControl({
+  booking,
+  isProvider,
+  onDone,
+}: {
+  booking: BookingDetailData;
+  isProvider: boolean;
+  onDone: () => void;
+}) {
+  const settleable =
+    booking.status === "CONFIRMED" ||
+    booking.status === "IN_PROGRESS" ||
+    booking.status === "COMPLETED";
+
+  const methods = acceptedPaymentMethods(booking.provider.paymentMethods);
+  const [open, setOpen] = useState(false);
+  const [method, setMethod] = useState<PaymentMethod>(
+    () => booking.paymentMethod,
+  );
+
+  if (!isProvider || !settleable || booking.paymentStatus === "PAID") {
+    return null;
+  }
+
+  return (
+    <>
+      <Button
+        variant="accent"
+        size="sm"
+        className="mt-3"
+        onClick={() => setOpen(true)}
+      >
+        <BadgeCheck aria-hidden />
+        Mark as paid
+      </Button>
+
+      <ConfirmDialog
+        open={open}
+        onOpenChange={setOpen}
+        title="Confirm you received the payment"
+        description="This is your record that the money arrived. It cannot be undone here — correcting it afterwards means raising a dispute."
+        confirmLabel="Yes, I received it"
+        onConfirm={() => bookings.markPaid(booking.id, { method })}
+        onDone={onDone}
+      >
+        <div className="space-y-1.5">
+          <Label htmlFor="paid-method">How was it actually paid?</Label>
+          <Select
+            id="paid-method"
+            value={method}
+            onChange={(event) =>
+              setMethod(event.target.value as PaymentMethod)
+            }
+          >
+            {methods.map((option) => (
+              <option key={option} value={option}>
+                {PAYMENT_METHOD_LABEL[option]}
+              </option>
+            ))}
+          </Select>
+          <p className="text-muted-foreground text-xs">
+            Agreed as {PAYMENT_METHOD_LABEL[booking.paymentMethod]}. Change it
+            here if they settled another way.
+          </p>
+        </div>
+      </ConfirmDialog>
+    </>
   );
 }
 

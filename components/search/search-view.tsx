@@ -22,6 +22,12 @@ import { ProviderCard } from "@/components/search/provider-card";
 import { ServiceCard } from "@/components/search/service-card";
 import { CompareTray } from "@/components/search/compare-tray";
 import {
+  ProviderTable,
+  ServiceTable,
+} from "@/components/search/result-tables";
+import { ResultsMap } from "@/components/search/results-map";
+import { useResultView, ViewToggle } from "@/components/search/view-toggle";
+import {
   categories as categoriesApi,
   providers as providersApi,
   services as servicesApi,
@@ -86,6 +92,9 @@ export function SearchView({ initialTab = "providers" }: { initialTab?: Tab }) {
   const acceptsEmergency = params.get("acceptsEmergency") === "true";
   const availableNow = params.get("availableNow") === "true";
   const sort = params.get("sort") ?? "relevance";
+  // A display preference, not part of the search: kept out of the URL so a
+  // shared link carries the query rather than how somebody likes to read it.
+  const [view, setView] = useResultView();
   const page = Number(params.get("page") ?? "1") || 1;
 
   /** Writes a patch back into the URL, resetting to page one as it goes. */
@@ -249,21 +258,25 @@ export function SearchView({ initialTab = "providers" }: { initialTab?: Tab }) {
               }}
             />
 
-            <div className="sm:w-52">
-              <label htmlFor="sort" className="sr-only">
-                Sort results
-              </label>
-              <Select
-                id="sort"
-                value={sort}
-                onChange={(event) => setParams({ sort: event.target.value })}
-              >
-                {(tab === "providers" ? SORTS : SERVICE_SORTS).map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </Select>
+            <div className="flex items-center gap-3">
+              <ViewToggle value={view} onChange={setView} />
+
+              <div className="sm:w-52">
+                <label htmlFor="sort" className="sr-only">
+                  Sort results
+                </label>
+                <Select
+                  id="sort"
+                  value={sort}
+                  onChange={(event) => setParams({ sort: event.target.value })}
+                >
+                  {(tab === "providers" ? SORTS : SERVICE_SORTS).map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
             </div>
           </div>
 
@@ -296,23 +309,43 @@ export function SearchView({ initialTab = "providers" }: { initialTab?: Tab }) {
                 }
               />
             ) : tab === "providers" ? (
-              <ul className="grid gap-5 sm:grid-cols-2">
-                {providerResults.data?.items.map((provider) => (
-                  <li key={provider.id}>
-                    <ProviderCard
-                      provider={provider}
-                      compared={compared.some((item) => item.id === provider.id)}
-                      compareDisabled={
-                        compared.length >= MAX_COMPARE &&
-                        !compared.some((item) => item.id === provider.id)
-                      }
-                      onCompareChange={(next) => toggleCompare(provider, next)}
-                    />
-                  </li>
-                ))}
-              </ul>
+              view === "map" ? (
+                <ResultsMap
+                  providers={providerResults.data?.items ?? []}
+                  city={city}
+                  onSelectCity={(next) => setParams({ city: next })}
+                />
+              ) : view === "table" ? (
+                <ProviderTable providers={providerResults.data?.items ?? []} />
+              ) : (
+                /* Grid and list are the same cards at different widths, so
+                   one list with a column count rather than two branches. */
+                <ul className={cn("grid gap-5", view === "grid" && "sm:grid-cols-2")}>
+                  {providerResults.data?.items.map((provider) => (
+                    <li key={provider.id}>
+                      <ProviderCard
+                        provider={provider}
+                        compared={compared.some((item) => item.id === provider.id)}
+                        compareDisabled={
+                          compared.length >= MAX_COMPARE &&
+                          !compared.some((item) => item.id === provider.id)
+                        }
+                        onCompareChange={(next) => toggleCompare(provider, next)}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              )
+            ) : view === "map" ? (
+              <ResultsMap
+                services={serviceResults.data?.items ?? []}
+                city={city}
+                onSelectCity={(next) => setParams({ city: next })}
+              />
+            ) : view === "table" ? (
+              <ServiceTable services={serviceResults.data?.items ?? []} />
             ) : (
-              <ul className="grid gap-5 sm:grid-cols-2">
+              <ul className={cn("grid gap-5", view === "grid" && "sm:grid-cols-2")}>
                 {serviceResults.data?.items.map((service) => (
                   <li key={service.id}>
                     <ServiceCard service={service} />

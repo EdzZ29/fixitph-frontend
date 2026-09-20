@@ -5,6 +5,7 @@ import { HowItWorks } from "@/components/site/how-it-works";
 import { WhyFixItPH } from "@/components/site/why-fixitph";
 import { FeaturedProviders } from "@/components/site/featured-providers";
 import { Coverage } from "@/components/site/coverage";
+import { ProviderPlans } from "@/components/site/provider-plans";
 import { ProviderCta } from "@/components/site/provider-cta";
 import { SiteFooter } from "@/components/site/site-footer";
 
@@ -27,6 +28,9 @@ export default function HomePage() {
         <WhyFixItPH />
         <FeaturedProviders />
         <Coverage />
+        {/* Pricing sits before the join CTA: what it costs is the question a
+            tradesperson has before "how do I sign up". */}
+        <ProviderPlans />
         <ProviderCta />
       </main>
 

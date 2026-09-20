@@ -370,12 +370,37 @@ export type QuoteStatus =
   | 'REJECTED'
   | 'WITHDRAWN'
   | 'EXPIRED';
-export type PaymentMethod = 'CASH' | 'GCASH' | 'MAYA' | 'BANK_TRANSFER';
+export type PaymentMethod =
+  | 'CASH'
+  | 'GCASH'
+  | 'MAYA'
+  | 'BANK_TRANSFER'
+  | 'MARIBANK'
+  | 'GOTYME_BANK';
 export type PaymentStatus =
   | 'UNPAID'
   | 'PARTIALLY_PAID'
   | 'PAID'
   | 'REFUNDED';
+/**
+ * The provider's marketplace commission, which is a different thing from
+ * PaymentStatus above: that one is the customer paying the provider, this one
+ * is the provider paying FixItPH.
+ */
+export type ProviderPlan = 'FREE' | 'PRO' | 'MAX';
+export type PlanPurchaseStatus =
+  | 'PAYMENT_SUBMITTED'
+  | 'ACTIVE'
+  | 'REJECTED'
+  | 'CANCELLED';
+export type CommissionStatus =
+  | 'DUE'
+  | 'PAYMENT_SUBMITTED'
+  | 'PAID'
+  | 'DISPUTED'
+  | 'WAIVED'
+  | 'CANCELLED'
+  | 'OVERDUE';
 export type BookingStatus =
   | 'PENDING_CONFIRMATION'
   | 'CONFIRMED'
@@ -463,6 +488,13 @@ export interface ProviderSummary {
   headline: string | null;
   baseCity: string;
   baseBarangay: string | null;
+  /**
+   * Blunted by the API to roughly a barangay — never the exact address, which
+   * for a provider trading from home is their front door. Null when they have
+   * not set a location. Good enough to pin on a map, and no nearer.
+   */
+  approxLatitude: number | null;
+  approxLongitude: number | null;
   ratingAvg: Decimal;
   ratingCount: number;
   completedJobsCount: number;
@@ -510,6 +542,9 @@ export interface PublicService {
     businessName: string;
     baseCity: string;
     baseBarangay: string | null;
+    /** Blunted to roughly a barangay. A service is pinned where its provider is. */
+    approxLatitude: number | null;
+    approxLongitude: number | null;
     ratingAvg: Decimal;
     ratingCount: number;
     verificationStatus: VerificationStatus;
@@ -545,6 +580,12 @@ export interface ProviderProfile {
   verifiedAt: string | null;
   baseCity: string;
   baseBarangay: string | null;
+  /**
+   * Blunted to roughly a barangay. The API never returns the exact pair, not
+   * even to the provider who set it — the row keeps it, the wire does not.
+   */
+  approxLatitude: number | null;
+  approxLongitude: number | null;
   serviceRadiusKm: number | null;
   ratingAvg: Decimal;
   ratingCount: number;
@@ -633,7 +674,16 @@ export interface BookingSummary {
   currency: string;
   paymentMethod: PaymentMethod;
   paymentStatus: PaymentStatus;
+  /**
+   * The receipt rather than the agreement: when the provider confirmed the
+   * money arrived and what it actually came by, which is not always the
+   * method the booking was agreed on. Null until they confirm it.
+   */
+  paidAt: string | null;
+  paidMethod: PaymentMethod | null;
   contactReleasedAt: string | null;
+  /** Step 6: set when the customer agreed the job was done. */
+  customerConfirmedAt: string | null;
   cancellationReason: string | null;
   cancelledAt: string | null;
   completedAt: string | null;
@@ -648,6 +698,7 @@ export interface BookingSummary {
     slug: string;
     ratingAvg: Decimal;
     ratingCount: number;
+    paymentMethods: PaymentMethod[];
   };
   service: { id: string; title: string; slug: string } | null;
   serviceRequest: {
@@ -709,6 +760,22 @@ export interface RequestSummary {
   category: { id: string; name: string; slug: string };
   provider: { id: string; businessName: string; slug: string } | null;
   _count: { quotes: number };
+  /**
+   * The newest booking this request produced, or nothing if it has not been
+   * booked yet. At most one, newest first — the progress tracker needs it
+   * because a request stays at BOOKED even after the job is finished.
+   */
+  bookings: {
+    id: string;
+    status: BookingStatus;
+    scheduledStart: string;
+    totalAmount: Decimal;
+    currency: string;
+    paymentMethod: PaymentMethod;
+    paymentStatus: PaymentStatus;
+    paidAt: string | null;
+    paidMethod: PaymentMethod | null;
+  }[];
 }
 
 export interface Quote {
@@ -728,6 +795,11 @@ export interface Quote {
     slug: string;
     ratingAvg: Decimal;
     ratingCount: number;
+    /**
+     * What this provider will actually take. An empty list means they have
+     * never said, which reads as cash only — see acceptedPaymentMethods.
+     */
+    paymentMethods?: PaymentMethod[];
   };
 }
 
@@ -1099,13 +1171,44 @@ export const auth = {
     barangay?: string;
     role?: 'CUSTOMER' | 'PROVIDER';
   }) {
+    /**
+     * No session comes back. The account is created PENDING_VERIFICATION and
+     * a code goes to the address; it becomes usable at verifyRegistration
+     * below, which is what returns the token.
+     */
+    return api.post<{
+      userId: string;
+      email: string;
+      verificationRequired: true;
+      codeTtlMinutes: number | null;
+      /** Development only, so a local machine needs no mailbox. */
+      devCode?: string;
+    }>('/auth/register', input, {
+      retryOnUnauthenticated: false,
+      retryOnRateLimit: 0,
+    });
+  },
+
+  /** Finishes a sign-up: checks the code, activates the account, signs in. */
+  async verifyRegistration(input: { email: string; code: string }) {
     const data = await api.post<{
       userId: string;
       accessToken: string;
       expiresIn: number;
-    }>('/auth/register', input, { retryOnUnauthenticated: false, retryOnRateLimit: 0 });
+    }>('/auth/email/verify-registration', input, {
+      retryOnUnauthenticated: false,
+      retryOnRateLimit: 0,
+    });
     setAccessToken(data.accessToken);
     return data;
+  },
+
+  resendRegistrationCode(email: string) {
+    return api.post<{ message: string; codeTtlMinutes: number; devCode?: string }>(
+      '/auth/email/resend-registration',
+      { email },
+      { retryOnUnauthenticated: false, retryOnRateLimit: 0 },
+    );
   },
 
   async logout() {
@@ -1506,6 +1609,22 @@ export const bookings = {
   cancel: (id: string, reason: string) =>
     api.post<BookingSummary>(`/bookings/${id}/cancel`, { reason }),
 
+  /**
+   * Step 6: the customer agreeing the job is done and the amount is right.
+   * Customer-only, and what raises the provider's commission.
+   */
+  confirmCompletion: (id: string) =>
+    api.post<BookingSummary>(`/bookings/${id}/confirm-completion`, {}),
+
+  /**
+   * Confirms a payment arrived. Provider-only on the server: they are the one
+   * who receives the money, so they are the only party who can say so.
+   */
+  markPaid: (
+    id: string,
+    input: { status?: "PAID" | "PARTIALLY_PAID"; method?: PaymentMethod } = {},
+  ) => api.post<BookingSummary>(`/bookings/${id}/payment`, input),
+
   complete: (
     id: string,
     input: { finalAmount?: number; notes?: string } = {},
@@ -1529,6 +1648,255 @@ export const reviews = {
 
   report: (id: string, input: { reason: string; details?: string }) =>
     api.post(`/reviews/${id}/report`, input),
+};
+
+export interface CommissionRow {
+  id: string;
+  bookingId: string;
+  providerId: string;
+  finalAmount: Decimal;
+  /** A fraction: 0.05 is 5%. Frozen at the moment the booking was confirmed. */
+  commissionRate: Decimal;
+  commissionAmount: Decimal;
+  currency: string;
+  status: CommissionStatus;
+  dueDate: string;
+  paidAt: string | null;
+  paymentMethod: PaymentMethod | null;
+  paymentReference: string | null;
+  submittedAt: string | null;
+  reviewedAt: string | null;
+  note: string | null;
+  /** Set once a receipt has been attached. The key itself never leaves the API. */
+  proofFilename: string | null;
+  proofMimeType: string | null;
+  proofSizeBytes: number | null;
+  createdAt: string;
+  booking: {
+    id: string;
+    completedAt: string | null;
+    serviceRequest: { title: string; city: string } | null;
+    service: { title: string } | null;
+  } | null;
+  /** Present on the admin listing only. */
+  provider?: { id: string; businessName: string; slug: string };
+}
+
+export interface CommissionSummary {
+  totalCommission: string;
+  paid: string;
+  amountDue: string;
+  overdue: string;
+  awaitingVerification: string;
+  disputed: string;
+  waived: string;
+  counts: {
+    all: number;
+    due: number;
+    overdue: number;
+    awaitingVerification: number;
+    paid: number;
+  };
+  currency: string;
+}
+
+/**
+ * The provider's own commission account.
+ *
+ * Nothing here touches a customer's payment — FixItPH never holds one. This
+ * is the marketplace fee the provider owes the platform on bookings it
+ * generated, which they remit separately.
+ */
+/**
+ * Where a provider sends their commission, per method. Operator-editable in
+ * platform settings, because there is no payment gateway holding the answer.
+ */
+export interface RemittanceDestination {
+  label?: string;
+  accountName?: string;
+  reference?: string;
+  /** Path to a QR image under the site's public directory. */
+  qr?: string;
+  /** Cash only: who to call, since there is no office to visit. */
+  contact?: string;
+  note?: string;
+}
+
+export const commissions = {
+  summary: () => api.get<CommissionSummary>('/commissions/summary'),
+
+  remittance: () =>
+    api.get<{
+      destinations: Partial<Record<PaymentMethod, RemittanceDestination>>;
+      note: string;
+    }>('/commissions/remittance'),
+
+  /** Attaches a receipt to a commission. Returns the stored file's details. */
+  uploadProof: (id: string, file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return api.post<{
+      id: string;
+      proofFilename: string | null;
+      proofMimeType: string | null;
+      proofSizeBytes: number | null;
+    }>(`/uploads/commission-proof/${id}`, form);
+  },
+
+  /** A short-lived URL for the receipt. */
+  proofUrl: (id: string) =>
+    api.get<{ url: string; expiresIn: number }>(
+      `/uploads/commission-proof/${id}/url`,
+    ),
+
+  list: (params: { status?: CommissionStatus; page?: number; limit?: number } = {}) =>
+    api.get<Paginated<CommissionRow>>('/commissions', { query: params }),
+
+  /** Declares a remittance. Stays unverified until an admin checks it. */
+  submitPayment: (
+    id: string,
+    input: {
+      method: PaymentMethod;
+      amount: number;
+      reference: string;
+      proofKey?: string;
+    },
+  ) => api.post<CommissionRow>(`/commissions/${id}/payment`, input),
+};
+
+export interface PlanDefinition {
+  label: string;
+  price: number;
+  /** null means unlimited. */
+  serviceLimit: number | null;
+  /**
+   * How long the plan lasts. null means it never expires, which is exactly
+   * what a paid plan buys — only the free one is a trial.
+   */
+  trialDays?: number | null;
+  tagline?: string;
+  features?: string[];
+}
+
+export interface PlanPurchaseRow {
+  id: string;
+  providerId: string;
+  plan: ProviderPlan;
+  amount: Decimal;
+  currency: string;
+  status: PlanPurchaseStatus;
+  paymentMethod: PaymentMethod;
+  paymentReference: string;
+  proofFilename: string | null;
+  proofMimeType: string | null;
+  proofSizeBytes: number | null;
+  submittedAt: string;
+  reviewedAt: string | null;
+  activatedAt: string | null;
+  note: string | null;
+  createdAt: string;
+  /** Present on the admin listing only. */
+  provider?: {
+    id: string;
+    businessName: string;
+    slug: string;
+    plan: ProviderPlan;
+  };
+}
+
+/**
+ * Provider plans: a one-time purchase that raises the listing limit.
+ *
+ * Buying files a declaration; the plan changes only once an admin has checked
+ * the payment, because there is no gateway to check it for them.
+ */
+export const plans = {
+  overview: () =>
+    api.get<{
+      plans: Record<ProviderPlan, PlanDefinition>;
+      current: ProviderPlan;
+      serviceLimit: number | null;
+      servicesUsed: number;
+      /** Null on a paid plan: only the free one runs out. */
+      trialEndsAt: string | null;
+      /** False once a free provider's week is up. Always true once paid. */
+      trialActive: boolean;
+      trialDaysLeft: number | null;
+      pending: PlanPurchaseRow | null;
+      destinations: Partial<Record<PaymentMethod, RemittanceDestination>>;
+      currency: string;
+    }>('/plans'),
+
+  purchases: (params: { page?: number; limit?: number } = {}) =>
+    api.get<Paginated<PlanPurchaseRow>>('/plans/purchases', { query: params }),
+
+  buy: (input: {
+    plan: Exclude<ProviderPlan, 'FREE'>;
+    method: PaymentMethod;
+    reference: string;
+  }) => api.post<PlanPurchaseRow>('/plans/purchases', input),
+
+  cancel: (id: string) =>
+    api.post<PlanPurchaseRow>(`/plans/purchases/${id}/cancel`, {}),
+
+  uploadProof: (id: string, file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return api.post<{ id: string; proofFilename: string | null }>(
+      `/uploads/plan-proof/${id}`,
+      form,
+    );
+  },
+
+  proofUrl: (id: string) =>
+    api.get<{ url: string; expiresIn: number }>(`/uploads/plan-proof/${id}/url`),
+};
+
+export const adminPlans = {
+  list: (
+    params: { status?: PlanPurchaseStatus; page?: number; limit?: number } = {},
+  ) => api.get<Paginated<PlanPurchaseRow>>('/admin/plans', { query: params }),
+
+  verify: (id: string) =>
+    api.post<PlanPurchaseRow>(`/admin/plans/${id}/verify`, {}),
+  reject: (id: string, reason: string) =>
+    api.post<PlanPurchaseRow>(`/admin/plans/${id}/reject`, { reason }),
+  setPlan: (providerId: string, plan: ProviderPlan, reason: string) =>
+    api.post(`/admin/plans/providers/${providerId}`, { plan, reason }),
+};
+
+export const adminCommissions = {
+  list: (
+    params: {
+      status?: CommissionStatus;
+      providerId?: string;
+      page?: number;
+      limit?: number;
+    } = {},
+  ) => api.get<Paginated<CommissionRow>>('/admin/commissions', { query: params }),
+
+  outstanding: () =>
+    api.get<{
+      items: {
+        provider: { id: string; businessName: string; slug: string } | null;
+        providerId: string;
+        outstanding: string;
+        count: number;
+      }[];
+      totalOutstanding: string;
+    }>('/admin/commissions/outstanding'),
+
+  verify: (id: string) =>
+    api.post<CommissionRow>(`/admin/commissions/${id}/verify`, {}),
+  reject: (id: string, reason: string) =>
+    api.post<CommissionRow>(`/admin/commissions/${id}/reject`, { reason }),
+  waive: (id: string, reason: string) =>
+    api.post<CommissionRow>(`/admin/commissions/${id}/waive`, { reason }),
+  adjust: (id: string, commissionAmount: number, reason: string) =>
+    api.post<CommissionRow>(`/admin/commissions/${id}/adjust`, {
+      commissionAmount,
+      reason,
+    }),
 };
 
 export const favorites = {

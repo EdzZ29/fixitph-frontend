@@ -73,6 +73,7 @@ export function BookingCard({
     | "confirm"
     | "start"
     | "complete"
+    | "confirmCompletion"
     | "dispute"
     | "review"
     | "reschedule"
@@ -99,6 +100,14 @@ export function BookingCard({
   // Only once: reviews.booking_id is unique, so a second attempt is a 409.
   // The list select carries the review's presence for exactly this check.
   const canReview = isCustomer && status === "COMPLETED" && !booking.review;
+  /**
+   * Step 6. The provider says the job is done; this is the customer agreeing,
+   * and it is what raises the provider's commission. Offered before the
+   * review because confirming the amount is the thing with consequences —
+   * disputing it afterwards is a great deal more work for everybody.
+   */
+  const canConfirmCompletion =
+    isCustomer && status === "COMPLETED" && !booking.customerConfirmedAt;
 
   // Both sides now have a real detail page. The provider's used to point back
   // at the list it was already on, which meant the thread on that booking was
@@ -234,6 +243,17 @@ export function BookingCard({
             </Button>
           ) : null}
 
+          {canConfirmCompletion ? (
+            <Button
+              variant="accent"
+              size="sm"
+              onClick={() => setDialog("confirmCompletion")}
+            >
+              <CircleCheck aria-hidden />
+              Confirm it is done
+            </Button>
+          ) : null}
+
           {canReview ? (
             <Button variant="outline" size="sm" onClick={() => setDialog("review")}>
               <Star aria-hidden />
@@ -310,6 +330,28 @@ export function BookingCard({
         onConfirm={() => bookings.start(booking.id)}
         onDone={onChanged}
       />
+
+      <ConfirmDialog
+        open={dialog === "confirmCompletion"}
+        onOpenChange={(open) => setDialog(open ? "confirmCompletion" : null)}
+        title="Confirm the job is finished?"
+        description={
+          <>
+            You are confirming the work is done and that{" "}
+            {money(booking.totalAmount, booking.currency)} is the amount you
+            settled. If something is wrong, dispute it instead of confirming.
+          </>
+        }
+        confirmLabel="Yes, it is finished"
+        onConfirm={() => bookings.confirmCompletion(booking.id)}
+        onDone={onChanged}
+      >
+        <p className="text-muted-foreground text-xs">
+          You pay your provider directly — FixItPH never holds that money.
+          Confirming lets the platform bill the provider its marketplace
+          commission on this booking.
+        </p>
+      </ConfirmDialog>
 
       <ConfirmDialog
         open={dialog === "complete"}

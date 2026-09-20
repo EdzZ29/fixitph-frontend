@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import { cities } from "@/lib/site-data";
 import { cn } from "cn";
 
@@ -21,12 +22,18 @@ const MarkerContent = dynamic(
   () => import("@/components/ui/map").then((m) => m.MarkerContent),
   { ssr: false },
 );
+const MarkerTooltip = dynamic(
+  () => import("@/components/ui/map").then((m) => m.MarkerTooltip),
+  { ssr: false },
+);
 const MapControls = dynamic(
   () => import("@/components/ui/map").then((m) => m.MapControls),
   { ssr: false },
 );
 
 export function CoverageMap() {
+  const router = useRouter();
+
   return (
     <div className="grid gap-8 lg:grid-cols-12 lg:gap-10">
       <div className="lg:col-span-6">
@@ -96,18 +103,55 @@ export function CoverageMap() {
                 key={city.name}
                 longitude={city.coordinates[0]}
                 latitude={city.coordinates[1]}
+                /**
+                 * A live city goes straight to its results. An opening one
+                 * has nothing to show yet, so clicking it would land somebody
+                 * on an empty search and read as a fault.
+                 */
+                onClick={
+                  city.status === "live"
+                    ? () =>
+                        router.push(
+                          `/search?city=${encodeURIComponent(city.name)}`,
+                        )
+                    : undefined
+                }
               >
                 <MarkerContent>
                   <span
                     className={cn(
                       "block size-3 rotate-45 border-2 border-white shadow-sm",
                       city.status === "live"
-                        ? "bg-lime-500"
+                        ? "bg-lime-500 cursor-pointer"
                         : "bg-muted-foreground",
                     )}
                     aria-hidden
                   />
                 </MarkerContent>
+
+                {/*
+                  The same three facts the list beside it carries. A pin that
+                  says only "somewhere here" makes a reader look away to the
+                  list and back to find which city they are pointing at.
+                */}
+                <MarkerTooltip>
+                  <div className="bg-background border-border rounded-md border px-3 py-2 shadow-md">
+                    <p className="text-sm font-semibold">{city.name}</p>
+                    <p className="text-muted-foreground text-xs">
+                      {city.region}
+                    </p>
+                    <p className="mt-1 text-xs font-medium">
+                      {city.status === "live"
+                        ? `${city.providerCount} providers taking bookings`
+                        : `${city.providerCount} signed up, opening soon`}
+                    </p>
+                    {city.status === "live" ? (
+                      <p className="text-accent-foreground bg-accent mt-1.5 rounded-sm px-1.5 py-0.5 text-center text-xs font-medium">
+                        Click to see them
+                      </p>
+                    ) : null}
+                  </div>
+                </MarkerTooltip>
               </MapMarker>
             ))}
           </Map>

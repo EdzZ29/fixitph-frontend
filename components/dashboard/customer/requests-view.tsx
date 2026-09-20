@@ -18,6 +18,7 @@ import { Select } from "@/components/ui/select";
 import { Pagination } from "@/components/dashboard/pagination";
 import { Segmented } from "@/components/dashboard/segmented";
 import { StatusBadge } from "@/components/dashboard/status-badge";
+import { RequestProgress } from "@/components/dashboard/request-progress";
 import { ConfirmDialog } from "@/components/dashboard/confirm-dialog";
 import {
   EmptyState,
@@ -34,10 +35,12 @@ import {
   type RequestSummary,
 } from "@/lib/api/client";
 import {
+  acceptedPaymentMethods,
   formatDate,
   formatDateTime,
   moneyRange,
   money,
+  PAYMENT_METHOD_LABEL,
   relativeTime,
   statusMeta,
   toDateTimeInputValue,
@@ -133,6 +136,9 @@ function RequestRow({
   const [cancelling, setCancelling] = useState(false);
 
   const quoteCount = request._count.quotes;
+  // The booking this request produced, if it has one. Newest first from the
+  // API, and at most one is carried.
+  const booking = request.bookings[0];
   const cancellable = !["BOOKED", "CLOSED", "CANCELLED", "EXPIRED"].includes(
     request.status,
   );
@@ -156,6 +162,35 @@ function RequestRow({
           </p>
         </div>
       </div>
+
+      <RequestProgress
+        status={request.status}
+        bookingStatus={booking?.status ?? null}
+        className="mt-3"
+        footer={
+          booking ? (
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+              <p className="text-sm">
+                <span className="tabular-nums">
+                  {money(booking.totalAmount, booking.currency)}
+                </span>
+                <span className="text-muted-foreground">
+                  {" · "}
+                  {PAYMENT_METHOD_LABEL[booking.paidMethod ?? booking.paymentMethod]}
+                </span>
+              </p>
+              <div className="flex items-center gap-2">
+                <StatusBadge meta={statusMeta.payment(booking.paymentStatus)} />
+                <span className="text-muted-foreground text-xs">
+                  {booking.paidAt
+                    ? `Confirmed ${formatDateTime(booking.paidAt)}`
+                    : "Paid directly to the provider"}
+                </span>
+              </div>
+            </div>
+          ) : null
+        }
+      />
 
       <dl className="text-muted-foreground mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-sm">
         <div className="flex items-center gap-1.5">
@@ -275,13 +310,6 @@ function QuoteList({
   );
 }
 
-const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
-  { value: "CASH", label: "Cash on completion" },
-  { value: "GCASH", label: "GCash" },
-  { value: "MAYA", label: "Maya" },
-  { value: "BANK_TRANSFER", label: "Bank transfer" },
-];
-
 function QuoteCard({
   quote,
   onChanged,
@@ -295,7 +323,10 @@ function QuoteCard({
   const [scheduledStart, setScheduledStart] = useState(() =>
     toDateTimeInputValue(new Date(Date.now() + 24 * 60 * 60 * 1000)),
   );
-  const [method, setMethod] = useState<PaymentMethod>("CASH");
+  // Only what this provider can actually receive. The server refuses the rest
+  // anyway, so offering more would just be an error waiting to happen.
+  const methods = acceptedPaymentMethods(quote.provider?.paymentMethods);
+  const [method, setMethod] = useState<PaymentMethod>(() => methods[0]);
 
   // Read once on mount rather than on every render: the clock is not a pure
   // render input, and an expiry badge does not need to tick over in place.
@@ -423,12 +454,17 @@ function QuoteCard({
                 setMethod(event.target.value as PaymentMethod)
               }
             >
-              {PAYMENT_METHODS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
+              {methods.map((option) => (
+                <option key={option} value={option}>
+                  {PAYMENT_METHOD_LABEL[option]}
                 </option>
               ))}
             </Select>
+            {methods.length === 1 ? (
+              <p className="text-muted-foreground text-xs">
+                The only method this provider takes.
+              </p>
+            ) : null}
           </div>
         </div>
         <p className="text-muted-foreground text-xs">

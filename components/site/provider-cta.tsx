@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/button";
 const benefits = [
   "Set your own rates and pick the barangays you actually cover.",
   "Job requests arrive by SMS and Viber, so you do not have to keep an app open all day.",
-  "Keep the full amount you quote during the pilot. No commission until we tell you in writing.",
-  "Get paid in cash, GCash, or bank transfer, whichever you and the customer agree on.",
+  "The customer pays you directly. FixItPH never holds your money, and charges a 5% commission only on bookings it brought you.",
+  "Get paid in cash, GCash, Maya or bank transfer, whichever you and the customer agree on.",
 ];
 
 const facts = [
@@ -24,7 +24,7 @@ const facts = [
   {
     icon: Wallet,
     label: "What it costs to join",
-    value: "Nothing during the pilot",
+    value: "Free for up to 3 services",
   },
 ];
 

@@ -10,8 +10,10 @@ import {
   Heart,
   LayoutDashboard,
   MessageSquareWarning,
+  Receipt,
   ScrollText,
   Settings,
+  Sparkles,
   Star,
   Store,
   Tags,
@@ -161,6 +163,19 @@ const PROVIDER: NavSection[] = [
     title: "Account",
     items: [
       {
+        href: "/provider/plans",
+        label: "Plans",
+        icon: Sparkles,
+        blurb: "How many services you can list, and how to upgrade.",
+      },
+      {
+        href: "/provider/commission",
+        label: "FixItPH commission",
+        icon: Receipt,
+        blurb:
+          "The marketplace fee on bookings the platform brought you, and how to settle it.",
+      },
+      {
         href: "/provider/settings",
         label: "Settings",
         icon: Settings,
@@ -247,6 +262,18 @@ const ADMIN: NavSection[] = [
   {
     title: "Operations",
     items: [
+      {
+        href: "/admin/plans",
+        label: "Plan payments",
+        icon: Sparkles,
+        blurb: "Verify one-time plan purchases and raise listing limits.",
+      },
+      {
+        href: "/admin/commissions",
+        label: "Commissions",
+        icon: Receipt,
+        blurb: "Verify provider remittances, adjust or waive, and see what is outstanding.",
+      },
       {
         href: "/admin/settings",
         label: "Settings",

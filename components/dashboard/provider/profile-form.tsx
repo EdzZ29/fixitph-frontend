@@ -2,14 +2,17 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { ExternalLink, Save } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { LocationPicker } from "@/components/dashboard/provider/location-picker";
+import { cities } from "@/lib/site-data";
 import {
   ActionError,
   ErrorState,
@@ -61,9 +64,14 @@ interface FormState {
   serviceRadiusKm: string;
   acceptsEmergency: boolean;
   paymentMethods: PaymentMethod[];
+  /** Where they are based, for the map. Null until they drop a pin. */
+  latitude: number | null;
+  longitude: number | null;
 }
 
 const EMPTY: FormState = {
+  latitude: null,
+  longitude: null,
   providerType: "INDIVIDUAL",
   businessName: "",
   headline: "",
@@ -99,6 +107,25 @@ export function ProviderProfileForm() {
   const [touched, setTouched] = useState(false);
   const [hydrated, setHydrated] = useState(isNew);
   const { run, pending, error } = useAction();
+
+  /**
+   * The cities FixItPH covers, plus whatever this provider is already saved
+   * as if it is not among them.
+   *
+   * Without that second part, turning this field into a dropdown would quietly
+   * blank the city of every provider who signed up before the list existed —
+   * they would open the form, see nothing selected, and save their profile
+   * into a city they never chose.
+   *
+   * Declared up here with the other hooks, above the loading and error
+   * returns below: a hook after a conditional return is one React stops
+   * seeing on the renders that take that branch.
+   */
+  const cityOptions = useMemo(() => {
+    const covered = cities.map((city) => city.name);
+    const saved = form.baseCity.trim();
+    return saved && !covered.includes(saved) ? [...covered, saved] : covered;
+  }, [form.baseCity]);
 
   // Seeded from the loaded profile once, during render: the fields are never
   // briefly blank over data that has already arrived.
@@ -172,6 +199,9 @@ export function ProviderProfileForm() {
         : null,
       acceptsEmergency: form.acceptsEmergency,
       paymentMethods: form.paymentMethods,
+      // Sent as-is; the API blunts it before it is ever published.
+      latitude: form.latitude,
+      longitude: form.longitude,
     };
 
     const result = await run(() =>
@@ -321,18 +351,44 @@ export function ProviderProfileForm() {
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="base-city">Based in which city?</Label>
-            <Input
+            <Select
               id="base-city"
               value={form.baseCity}
-              onChange={(event) => set("baseCity", event.target.value)}
+              onChange={(event) => {
+                const name = event.target.value;
+                const match = cities.find((city) => city.name === name);
+                setTouched(true);
+                /**
+                 * Picking a city drops the pin on it, so the map is right
+                 * without anybody reading a coordinate. An existing pin is
+                 * left alone — a provider who has already placed themselves
+                 * precisely should not be thrown back to the city centre by
+                 * re-selecting the city they were already in.
+                 */
+                setForm((current) => ({
+                  ...current,
+                  baseCity: name,
+                  ...(match && current.latitude === null
+                    ? {
+                        latitude: match.coordinates[1],
+                        longitude: match.coordinates[0],
+                      }
+                    : {}),
+                }));
+              }}
               onBlur={() => setTouched(true)}
               aria-invalid={!!show("baseCity") || undefined}
               aria-describedby="base-city-hint"
-              placeholder="Butuan"
-              maxLength={120}
-            />
+            >
+              <option value="">Choose a city</option>
+              {cityOptions.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </Select>
             <Hint id="base-city-hint" error={show("baseCity")}>
-              Required. Customers filter by this.
+              Required. Customers filter by this, and it places you on the map.
             </Hint>
           </div>
 
@@ -351,6 +407,23 @@ export function ProviderProfileForm() {
               maxLength={120}
             />
           </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label>
+            Where you are based{" "}
+            <span className="text-muted-foreground font-normal">
+              (optional)
+            </span>
+          </Label>
+          <LocationPicker
+            latitude={form.latitude}
+            longitude={form.longitude}
+            disabled={pending}
+            onChange={(next) =>
+              setForm((current) => ({ ...current, ...next }))
+            }
+          />
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -555,6 +628,14 @@ function toFormState(profile: ProviderProfile): FormState {
     paymentMethods: profile.paymentMethods.length
       ? profile.paymentMethods
       : ["CASH"],
+    /**
+     * Seeded from the blunted figure the API publishes, which is the only one
+     * it hands back. Dragging the pin replaces it with a precise point; not
+     * touching it re-saves the rounded one, which is a pin in the same
+     * barangay rather than a silent move.
+     */
+    latitude: profile.approxLatitude ?? null,
+    longitude: profile.approxLongitude ?? null,
   };
 }
 

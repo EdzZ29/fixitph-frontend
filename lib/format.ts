@@ -14,6 +14,9 @@
 import type {
   BookingStatus,
   DisputeStatus,
+  CommissionStatus,
+  PaymentMethod,
+  PlanPurchaseStatus,
   PaymentStatus,
   PricingType,
   QuoteStatus,
@@ -311,6 +314,9 @@ export const statusMeta = {
     VERIFICATION[value] ?? fallback(value),
   user: (value: UserStatus) => USER[value] ?? fallback(value),
   payment: (value: PaymentStatus) => PAYMENT[value] ?? fallback(value),
+  commission: (value: CommissionStatus) => COMMISSION[value] ?? fallback(value),
+  planPurchase: (value: PlanPurchaseStatus) =>
+    PLAN_PURCHASE[value] ?? fallback(value),
   dispute: (value: DisputeStatus) => DISPUTE[value] ?? fallback(value),
   report: (value: ReportStatus) => REPORT[value] ?? fallback(value),
   urgency: (value: RequestUrgency) => URGENCY[value] ?? fallback(value),
@@ -323,6 +329,61 @@ function fallback(value: string): StatusMeta {
 // ---------------------------------------------------------------------------
 // Pricing
 // ---------------------------------------------------------------------------
+
+/**
+ * The disclosure, in one place so every screen that mentions the commission
+ * says exactly the same thing. Two separate arrangements get confused very
+ * easily, and the whole point of this sentence is to keep them apart.
+ */
+export const COMMISSION_DISCLOSURE =
+  "Customers pay service providers directly. FixItPH does not process or hold customer service payments. FixItPH charges providers a marketplace commission for completed bookings generated through the platform.";
+
+const PLAN_PURCHASE: Record<PlanPurchaseStatus, StatusMeta> = {
+  PAYMENT_SUBMITTED: { label: "Awaiting verification", tone: "warning" },
+  ACTIVE: { label: "Active", tone: "positive" },
+  REJECTED: { label: "Not verified", tone: "critical" },
+  CANCELLED: { label: "Withdrawn", tone: "muted" },
+};
+
+const COMMISSION: Record<CommissionStatus, StatusMeta> = {
+  DUE: { label: "Due", tone: "warning" },
+  PAYMENT_SUBMITTED: { label: "Awaiting verification", tone: "neutral" },
+  PAID: { label: "Paid", tone: "positive" },
+  DISPUTED: { label: "On hold — disputed", tone: "critical" },
+  WAIVED: { label: "Waived", tone: "muted" },
+  CANCELLED: { label: "Cancelled", tone: "muted" },
+  OVERDUE: { label: "Overdue", tone: "critical" },
+};
+
+/** 0.05 reads as "5%". Trailing zeros dropped, so 0.0725 is "7.25%". */
+export function ratePercent(rate: string | number): string {
+  const percent = Number(rate) * 100;
+  if (!Number.isFinite(percent)) return "—";
+  return `${Number(percent.toFixed(2))}%`;
+}
+
+export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
+  CASH: "Cash",
+  GCASH: "GCash",
+  MAYA: "Maya",
+  BANK_TRANSFER: "Bank transfer",
+  MARIBANK: "MariBank",
+  GOTYME_BANK: "GoTyme Bank",
+};
+
+/**
+ * What a provider will actually take.
+ *
+ * Mirrors assertProviderAccepts on the server, and has to keep mirroring it:
+ * an empty list means the provider never said, which reads as cash only
+ * rather than as anything at all. Offering a method the server will then
+ * refuse is a picker that lies to the customer.
+ */
+export function acceptedPaymentMethods(
+  listed: PaymentMethod[] | undefined | null,
+): PaymentMethod[] {
+  return listed && listed.length ? listed : ["CASH"];
+}
 
 export const PRICING_LABEL: Record<PricingType, string> = {
   FIXED: "Fixed price",
